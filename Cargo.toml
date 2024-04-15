@@ -1,0 +1,15 @@
+[package]
+name = "mule2bpmn"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ryan Ruckley <rruckley@gmail.com"]
+description = "Tool to convert MuleSoft API into BPMN workflows"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"]}
+env_logger = "0.11.3"
+log = "0.4.21"
+xml-rs = "0.8.20"
+xmltree = "0.10.3"

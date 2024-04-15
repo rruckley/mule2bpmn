@@ -1,0 +1,480 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:api-platform-gw="http://www.mulesoft.org/schema/mule/api-platform-gw" xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit" xmlns:context="http://www.springframework.org/schema/context" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:optus-logger-module="http://www.mulesoft.org/schema/mule/optus-logger-module" xmlns:secure-property-placeholder="http://www.mulesoft.org/schema/mule/secure-property-placeholder" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:tcp="http://www.mulesoft.org/schema/mule/tcp" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/api-platform-gw http://www.mulesoft.org/schema/mule/api-platform-gw/current/mule-api-platform-gw.xsd
+http://www.mulesoft.org/schema/mule/tcp http://www.mulesoft.org/schema/mule/tcp/current/mule-tcp.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/apikit http://www.mulesoft.org/schema/mule/apikit/current/mule-apikit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-current.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/optus-logger-module http://www.mulesoft.org/schema/mule/optus-logger-module/current/mule-optus-logger-module.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/secure-property-placeholder http://www.mulesoft.org/schema/mule/secure-property-placeholder/current/mule-secure-property-placeholder.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+    <http:listener-config name="incident-api-httpListenerConfig" host="0.0.0.0" port="${process-incident.port}" doc:name="HTTP Listener Configuration" basePath="${process-incident.path}" />
+    <apikit:config name="incident-api-config" raml="incident-api.raml" consoleEnabled="false" doc:name="Router" keepRamlBaseUri="false" />
+    <http:request-config name="HTTP_system-snow_Configuration" host="${system-snow.host}" port="${system-snow.port}" basePath="${system-snow.path}" doc:name="HTTP Request Configuration" responseTimeout="60000" >
+        <tcp:client-socket-properties connectionTimeout="30000" timeout="18000" />
+		<http:raml-api-configuration location="RAML/snow-api.raml"/>
+
+    </http:request-config>
+    <http:request-config name="HTTP_Request_MOOG" host="${system-moog.host}" port="${system-moog.port}" basePath="${system-moog.path}" doc:name="HTTP Request Configuration" proxy-ref="GIO_OBTAC_Proxy" responseTimeout="60000">
+		<http:raml-api-configuration location="RAML/moog-api.raml"/>
+    </http:request-config>
+       <http:request-config name="HTTP_Request_MOOG_SDC" host="${system-moog.sdc.host}" port="${system-moog.sdc.port}" basePath="${system-moog.sdc.path}" doc:name="HTTP Request Configuration"  responseTimeout="60000" >
+		<http:raml-api-configuration location="RAML/moog-api.raml"/>
+
+    </http:request-config>
+    <spring:beans>
+        <spring:import resource="classpath*:error-handler.xml" />
+    </spring:beans>
+    <api-platform-gw:api apiName="Incident Management API (PROC)" version="${auto-discovery.id}" flowRef="incident-api-main" create="true" apikitRef="incident-api-config" doc:name="API Autodiscovery" />
+    <db:oracle-config name="Oracle_Configuration_OVO" host="${ovo-db.host}" port="${ovo-db.port}" instance="${ovo-db.instance}" user="${ovo-db.user}" password="${ovo-db.password}" doc:name="Oracle Configuration" />
+    <secure-property-placeholder:config name="Secure_Property_Placeholder" key="${mule.key}" location="properties/${mule.env}.properties" doc:name="Secure Property Placeholder" />
+    <http:request-config name="HTTP_system-snow-ob_Configuration" host="${system-snow-ob.host}" port="${system-snow-ob.port}" basePath="${system-snow-ob.path}" responseTimeout="60000" doc:name="HTTP Request Configuration"   connectionIdleTimeout="60000">
+    </http:request-config>
+    <http:proxy name="GIO_OBTAC_Proxy" host="${gio.proxy.host}" port="${gio.proxy.port}" doc:name="Proxy Configuration"/>
+    <flow name="incident-api-main">
+        <http:listener config-ref="incident-api-httpListenerConfig" path="/api/*" doc:name="HTTP" />
+        <optus-logger-module:init-correlation-i-d doc:name="Optus Logger Module" />
+        <set-variable variableName="inboundHeader" value="#[message.inboundProperties.'X-Incident-Search-Scope']" mimeType="application/json" doc:name="inboundHeader"/>
+        <apikit:router config-ref="incident-api-config" doc:name="APIkit Router" />
+        <exception-strategy ref="error-handler-apikit-with-downstream-exception" doc:name="Reference Exception Strategy" />
+    </flow>
+    <flow name="incident-api-console">
+        <http:listener config-ref="incident-api-httpListenerConfig" path="/console/*" doc:name="HTTP" />
+        <apikit:console config-ref="incident-api-config" doc:name="APIkit Console" />
+    </flow>
+    <flow name="get:/incident/number/{number}:incident-api-config">
+        <optus-logger-module:logger message="Getting incident number: #[flowVars.number]" doc:name="Optus Logger Module"/>
+
+        <choice doc:name="Choice">
+            <when expression="#[message.inboundProperties.'X-Incident-Search-Scope' == &quot;incident&quot;]">
+                <flow-ref name="get:/incident/{number}:implementation" doc:name="get:/incident/{number}:implementation"/>
+            </when>
+            <when expression="#[message.inboundProperties.'X-Incident-Search-Scope' == &quot;case&quot;]">
+                <flow-ref name="get:/case/{number}:application/json:implementation" doc:name="get:/case/{number}:application/json:implementation"/>
+            </when>
+            <otherwise>
+                <choice doc:name="Choice">
+                    <when expression="#[${incident.flag.indicator} == &quot;true&quot;]">
+                        <scripting:component doc:name="Groovy">
+                            <scripting:script engine="Groovy"><![CDATA[try
+{
+	final def KEY_CNOC = "cnoc"
+	final def KEY_NUCLEUS = "ob"
+  	
+  	println "Started to set routing flag"
+
+	/**def serviceNowJson = payload as String
+	println "serviceNowJson=$serviceNowJson"
+
+	def slurper = new groovy.json.JsonSlurper()
+	def serviceNowObject = slurper.parseText(serviceNowJson)
+	
+  	def serviceNowId = serviceNowObject.etomMonitoringId */
+  	def serviceNowId = flowVars.number
+
+	if(serviceNowId.contains('OBINC'))
+	{
+		flowVars.routingFlag = KEY_CNOC
+	}
+	else if (serviceNowId.contains('OBCS'))
+	{
+		flowVars.routingFlag = KEY_NUCLEUS
+	}
+	else
+	{
+  		flowVars.routingFlag = KEY_NUCLEUS
+  	}
+ }
+ catch(Exception e)
+ {
+	flowVars.routingFlag = KEY_NUCLEUS
+ 	println "ERROR: Exception has occurred. The message was $e.message"
+ }
+  
+  return payload]]></scripting:script>
+                        </scripting:component>
+                        <choice doc:name="Choice">
+                            <when expression="#[flowVars.routingFlag ==&quot;cnoc&quot;]">
+                                <flow-ref name="get:/incident/{number}:implementation" doc:name="get:/incident/{number}:implementation"/>
+                            </when>
+                            <otherwise>
+                                <flow-ref name="get:/case/{number}:application/json:implementation" doc:name="get:/case/{number}:application/json:implementation"/>
+                            </otherwise>
+                        </choice>
+                    </when>
+                    <otherwise>
+                        <flow-ref name="get:/case/{number}:application/json:implementation" doc:name="get:/case/{number}:application/json:implementation"/>
+                    </otherwise>
+                </choice>
+
+            </otherwise>
+        </choice>
+
+    </flow>
+        <flow name="get:/incident/number:incident-api-config">
+        <optus-logger-module:logger message="Getting Incident associated with companyID: #[message.inboundProperties.'http.query.params'.companyId]" doc:name="Optus Logger Module"/>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.inboundHeader  == &quot;incident&quot;]">
+                <flow-ref name="get:/incident/number:implementation" doc:name="get:/incident/number:implementation"/>
+            </when>
+            <when expression="#[flowVars.inboundHeader == &quot;case&quot;]">
+                <flow-ref name="get:/case/number:implementation" doc:name="get:/case/number:implementation"/>
+            </when>
+            <when expression="#[flowVars.inboundHeader == &quot;incidentAndCase&quot;]">
+                <object-to-string-transformer doc:name="Object to String"/>
+                <scatter-gather doc:name="Scatter-Gather">
+                    <flow-ref name="get:/incident/number:implementation" doc:name="get:/incident/number:implementation"/>
+                    <flow-ref name="get:/case/number:implementation" doc:name="get:/case/number:implementation"/>
+                </scatter-gather>
+                <dw:transform-message doc:name="Transform Message">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+flatten payload]]></dw:set-payload>
+                </dw:transform-message>
+            </when>
+            <otherwise>
+                <flow-ref name="get:/case/number:implementation" doc:name="get:/case/number:implementation"/>
+            </otherwise>
+        </choice>
+
+
+
+    </flow>
+    <flow name="get:/incident/id/{id}:incident-api-config">
+        <optus-logger-module:logger message="Getting Incident Id: #[flowVars.id]" doc:name="Optus Logger Module"/>
+
+        <choice doc:name="Choice">
+            <when expression="#[message.inboundProperties.'X-Incident-Search-Scope' == &quot;incident&quot;]">
+                <flow-ref name="get:/incident/{id}:implementation" doc:name="get:/incident/{id}:implementation"/>
+            </when>
+            <when expression="#[message.inboundProperties.'X-Incident-Search-Scope' == &quot;case&quot;]">
+                <flow-ref name="get:/case/{id}:implementation" doc:name="get:/case/{id}:implementation"/>
+            </when>
+            <otherwise>
+                <choice doc:name="Choice">
+                    <when expression="#[${incident.flag.indicator} == &quot;true&quot;]">
+                        <flow-ref name="get:/incident/{id}:implementation" doc:name="get:/incident/{id}:implementation"/>
+                        <choice doc:name="Choice">
+                            <when expression="#[dw('payload.incident') == &quot;Record Not Found&quot;]">
+                                <flow-ref name="get:/case/{id}:implementation" doc:name="get:/case/{id}:implementation"/>
+                                <optus-logger-module:logger message="Retrieved case from system-snow-ob" doc:name="Optus Logger Module"/>
+                            </when>
+                            <otherwise>
+                                <optus-logger-module:logger message="Retrieved Incident from system-snow" doc:name="Optus Logger Module"/>
+                            </otherwise>
+                        </choice>
+                    </when>
+                    <otherwise>
+                        <flow-ref name="get:/case/{id}:implementation" doc:name="get:/case/{id}:implementation"/>
+                    </otherwise>
+                </choice>
+
+            </otherwise>
+        </choice>
+
+    </flow>
+    <flow name="get:/incident/ci/{configurationItem}/active:incident-api-config">
+        <optus-logger-module:logger message="Getting active incidents for configuration Item: #[flowVars.configurationItem]" doc:name="Optus Logger Module"/>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.inboundHeader == &quot;incident&quot;]">
+                <flow-ref name="get:/incident/ci/{configurationItem}/active:implementation" doc:name="get:/incident/ci/{configurationItem}/active:implementation"/>
+            </when>
+            <when expression="#[flowVars.inboundHeader == &quot;case&quot;]">
+                <flow-ref name="get:/case/ci/{configurationItem}/active:implementation" doc:name="get:/case/ci/{configurationItem}/active:implementation"/>
+            </when>
+            <when expression="#[flowVars.inboundHeader == &quot;incidentAndCase&quot;]">
+                <object-to-string-transformer doc:name="Object to String"/>
+                <scatter-gather doc:name="Scatter-Gather">
+                    <flow-ref name="get:/incident/ci/{configurationItem}/active:implementation" doc:name="get:/incident/ci/{configurationItem}/active:implementation"/>
+                    <flow-ref name="get:/case/ci/{configurationItem}/active:implementation" doc:name="get:/case/ci/{configurationItem}/active:implementation"/>
+                </scatter-gather>
+                <dw:transform-message doc:name="Transform Message">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+flatten payload]]></dw:set-payload>
+                </dw:transform-message>
+            </when>
+            <otherwise>
+                <flow-ref name="get:/case/ci/{configurationItem}/active:implementation" doc:name="get:/case/ci/{configurationItem}/active:implementation"/>
+
+            </otherwise>
+        </choice>
+
+    </flow>
+    <flow name="post:/incident:application/json:incident-api-config">
+        <optus-logger-module:logger message="Creating new incident or case" doc:name="Optus Logger Module"/>
+
+        <choice doc:name="Choice">
+            <when expression="#[message.inboundProperties.'X-Convert-To-Case' == false]">
+                <flow-ref name="post:/incident:application/json:implementation" doc:name="post:/incident:application/json:implementation"/>
+            </when>
+            <otherwise>
+                <flow-ref name="post:/case:application/json:implementation" doc:name="post:/case:application/json:implementation"/>
+            </otherwise>
+        </choice>
+
+    </flow>
+    <flow name="post:/incident/active:application/json:incident-api-config">
+        <optus-logger-module:logger message="Creating active incidents" doc:name="Optus Logger Module"/>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.inboundHeader == &quot;incident&quot;]">
+                <flow-ref name="post:/incident/active:application/json:implementation" doc:name="post:/incident/active:application/json:implementation"/>
+            </when>
+            <when expression="#[flowVars.inboundHeader == &quot;case&quot;]">
+                <flow-ref name="post:/case/active:implementation" doc:name="post:/case/active:implementation"/>
+            </when>
+            <when expression="#[flowVars.inboundHeader == &quot;incidentAndCase&quot;]">
+                <object-to-string-transformer doc:name="Object to String"/>
+                <scatter-gather doc:name="Scatter-Gather">
+                    <flow-ref name="post:/incident/active:application/json:implementation" doc:name="post:/incident/active:application/json:implementation"/>
+                    <flow-ref name="post:/case/active:implementation" doc:name="post:/case/active:implementation"/>
+                </scatter-gather>
+                <dw:transform-message doc:name="Transform Message">
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+flatten payload]]></dw:set-payload>
+                </dw:transform-message>
+            </when>
+            <otherwise>
+                <flow-ref name="post:/case/active:implementation" doc:name="post:/case/active:implementation"/>
+
+            </otherwise>
+        </choice>
+
+    </flow>
+    
+    <flow name="patch:/incident/id/{id}:application/json:incident-api-config">
+        <logger message="Updating Incident Id: #[flowVars.id]" level="INFO" doc:name="Logger" />
+        <flow-ref name="get:/incident/{number}:implementation" doc:name="get:/incident/{number}:implementation" />
+    </flow>
+    <flow name="patch:/incident/number/{number}:application/json:incident-api-config">
+        <optus-logger-module:logger message="START : Updating incident number: #[flowVars.number]" doc:name="Optus Logger Module" logPayload="true" type="ENTRY"/>
+        <scripting:component doc:name="Groovy-script-routingFlag">
+            <scripting:script engine="Groovy"><![CDATA[try
+{
+	final def KEY_CNOC = "cnoc"
+	final def KEY_NUCLEUS = "ob"
+  	
+  	println "Started to set routing flag"
+
+	/**def serviceNowJson = payload as String
+	println "serviceNowJson=$serviceNowJson"
+
+	def slurper = new groovy.json.JsonSlurper()
+	def serviceNowObject = slurper.parseText(serviceNowJson)
+	
+  	def serviceNowId = serviceNowObject.etomMonitoringId */
+  	def serviceNowId = flowVars.number
+
+	if(serviceNowId.contains('OBINC'))
+	{
+		flowVars.routingFlag = KEY_CNOC
+	}
+	else if (serviceNowId.contains('OBCS'))
+	{
+		flowVars.routingFlag = KEY_NUCLEUS
+	}
+	else
+	{
+  		flowVars.routingFlag = KEY_NUCLEUS
+  	}
+ }
+ catch(Exception e)
+ {
+	flowVars.routingFlag = KEY_NUCLEUS
+ 	println "ERROR: Exception has occurred. The message was $e.message"
+ }
+  
+  return payload]]></scripting:script>
+        </scripting:component>
+
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.routingFlag == &quot;cnoc&quot;]">
+                <flow-ref name="patch:/incident/number/{number}:application/json:implementation" doc:name="patch:/incident/number/{number}:application/json:implementation"/>
+            </when>
+            <otherwise>
+                <flow-ref name="patch:/case/number/{number}:implementation" doc:name="patch:/case/number/{number}:implementation"/>
+            </otherwise>
+        </choice>
+
+    </flow>
+	<flow name="put:/incident/number/{number}:application/json:incident-api-config">
+        <optus-logger-module:logger message="Updating incident number: #[flowVars.number]" doc:name="Optus Logger Module" logPayload="true"/>
+        <scripting:component doc:name="Groovy-script-routingFlag">
+            <scripting:script engine="Groovy"><![CDATA[try
+{
+	final def KEY_CNOC = "cnoc"
+	final def KEY_NUCLEUS = "ob"
+  	
+  	println "Started to set routing flag"
+
+	/**def serviceNowJson = payload as String
+	println "serviceNowJson=$serviceNowJson"
+
+	def slurper = new groovy.json.JsonSlurper()
+	def serviceNowObject = slurper.parseText(serviceNowJson)
+	
+  	def serviceNowId = serviceNowObject.etomMonitoringId */
+  	def serviceNowId = flowVars.number
+
+	if(serviceNowId.contains('OBINC'))
+	{
+		flowVars.routingFlag = KEY_CNOC
+	}
+	else if (serviceNowId.contains('OBCS'))
+	{
+		flowVars.routingFlag = KEY_NUCLEUS
+	}
+	else
+	{
+  		flowVars.routingFlag = KEY_NUCLEUS
+  	}
+ }
+ catch(Exception e)
+ {
+	flowVars.routingFlag = KEY_NUCLEUS
+ 	println "ERROR: Exception has occurred. The message was $e.message"
+ }
+  
+  return payload]]></scripting:script>
+        </scripting:component>
+
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.routingFlag == &quot;cnoc&quot;]">
+                <flow-ref name="patch:/incident/number/{number}:application/json:implementation" doc:name="patch:/incident/number/{number}:application/json:implementation"/>
+            </when>
+            <otherwise>
+                <flow-ref name="patch:/case/number/{number}:implementation" doc:name="patch:/case/number/{number}:implementation"/>
+            </otherwise>
+        </choice>
+
+    </flow>
+    <flow name="get:/situation/summary:incident-api-config">
+        <flow-ref name="get:/situation/summary:incident-api-config:implementation" doc:name="get:/situation/summary:incident-api-config:implementation" />
+    </flow>
+    <flow name="get:/situation:incident-api-config">
+        <flow-ref name="get:/situation:incident-api-config:implementation" doc:name="get:/situation:incident-api-config:implementation" />
+    </flow>
+    <flow name="patch:/situation/id/{situationId}:application/json:incident-api-config">
+        <flow-ref name="patch:/situation/id/{situationId}:application/json:incident-SITUATION" doc:name="patch:/situation/id/{situationId}:application/json:incident-SITUATION" />
+    </flow>
+
+    <flow name="patch:/situation/id/{situationId}/triageData:application/json:incident-api-config">
+        <flow-ref name="patch:/situation/id/{situation}/triageData:application/json:implementation" doc:name="patch:/situation/id/{situation}/triageData:application/json:implementation" />
+    </flow>
+
+    <flow name="put:/situation/id/{situationId}:application/json:incident-api-config">
+        <flow-ref name="patch:/situation/id/{situationId}:application/json:incident-SITUATION" doc:name="patch:/situation/id/{situationId}:application/json:incident-SITUATION" />
+    </flow>
+    
+    
+    <flow name="post:/situation:application/json:incident-api-config">
+        <flow-ref name="post:/situation:Implementation" doc:name="post:/situation:Implementation" />
+    </flow>
+    
+    
+    <flow name="patch:/alerts/id/{alertID}/close:incident-api-config">
+        <flow-ref name="patch:/alerts/id/{alertID}/close:incident-api-config:implementation" doc:name="patch:/alerts/id/{alertID}/close:incident-api-config:implementation" />
+    </flow>
+    <flow name="get:/alerts:incident-api-config">
+        <flow-ref name="get:/alerts:incident-api-config:implementation" doc:name="get:/alerts:incident-api-config:implementation" />
+    </flow>
+    <flow name="get:/alerts/id/{alertID}:incident-api-config">
+        <flow-ref name="get:/alerts/id/{alertID}:incident-api-config:implementation" doc:name="get:/alerts/id/{alertID}:incident-api-config:implementation" />
+    </flow>
+    <flow name="patch:/alerts/id/{alertID}/severity:application/json:incident-api-config">
+        <flow-ref name="patch:/alerts/id/{alertID}/severity:application/json:incident-api-config:implementation" doc:name="patch:/alerts/id/{alertID}/severity:application/json:incident-api-config:implementation" />
+    </flow>
+    <flow name="put:/situation/id/{situationId}/close:incident-api-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="put:/case/number/{number}:application/json:incident-api-config">
+        <flow-ref name="patch:/case/number/{number}:implementation" doc:name="patch:/case/number/{number}:implementation"/>
+
+    </flow>
+    <flow name="patch:/situation/id/{situationId}/close:incident-api-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="patch:/case/id/{id}:application/json:incident-api-config">
+        <logger message="Updating case Id: #[flowVars.id]" level="INFO" doc:name="Logger"/>
+        <flow-ref name="get:/case/{number}:application/json:implementation" doc:name="get:/case/{number}:application/json:implementation"/>
+
+    </flow>
+    <flow name="patch:/case/number/{number}:application/json:incident-api-config">
+        <flow-ref name="patch:/case/number/{number}:implementation" doc:name="patch:/case/number/{number}:implementation"/>
+
+    </flow>
+    <flow name="get:/case/ci/{configurationItem}/active:incident-api-config">
+        <flow-ref name="get:/case/ci/{configurationItem}/active:implementation" doc:name="get:/case/ci/{configurationItem}/active:implementation"/>
+
+    </flow>
+    <flow name="get:/case:incident-api-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="get:/incident:incident-api-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="get:/case/number:incident-api-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+
+
+    </flow>
+    <flow name="get:/case/id/{id}:incident-api-config">
+        <logger message="Getting case Id: #[flowVars.id]" level="INFO" doc:name="Logger"/>
+        <flow-ref name="get:/case/{id}:implementation" doc:name="get:/case/{id}:implementation"/>
+
+    </flow>
+    <flow name="get:/heartbeat/{integration}:incident-api-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="get:/case/number/{number}:incident-api-config">
+        <logger message="Getting case number: #[flowVars.number]" level="INFO" doc:name="Logger"/>
+        <flow-ref name="get:/case/{number}:application/json:implementation" doc:name="get:/case/{number}:application/json:implementation"/>
+
+    </flow>
+    <flow name="get:/situation/id/{situationId}:incident-api-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="post:/case/active:application/json:incident-api-config">
+        <flow-ref name="post:/case/active:implementation" doc:name="post:/case/active:implementation"/>
+
+    </flow>
+    <flow name="post:/case:application/json:incident-api-config">
+        <flow-ref name="post:/case:application/json:implementation" doc:name="post:/case:application/json:implementation"/>
+
+    </flow>
+    <apikit:mapping-exception-strategy name="incident-api-apiKitGlobalExceptionMapping">
+        <apikit:mapping statusCode="404">
+            <apikit:exception value="org.mule.module.apikit.exception.NotFoundException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property" />
+            <set-payload value="{ &quot;message&quot;: &quot;Resource not found&quot; }" doc:name="Set Payload" />
+        </apikit:mapping>
+        <apikit:mapping statusCode="405">
+            <apikit:exception value="org.mule.module.apikit.exception.MethodNotAllowedException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property" />
+            <set-payload value="{ &quot;message&quot;: &quot;Method not allowed&quot; }" doc:name="Set Payload" />
+        </apikit:mapping>
+        <apikit:mapping statusCode="415">
+            <apikit:exception value="org.mule.module.apikit.exception.UnsupportedMediaTypeException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property" />
+            <set-payload value="{ &quot;message&quot;: &quot;Unsupported media type&quot; }" doc:name="Set Payload" />
+        </apikit:mapping>
+        <apikit:mapping statusCode="406">
+            <apikit:exception value="org.mule.module.apikit.exception.NotAcceptableException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property" />
+            <set-payload value="{ &quot;message&quot;: &quot;Not acceptable&quot; }" doc:name="Set Payload" />
+        </apikit:mapping>
+        <apikit:mapping statusCode="400">
+            <apikit:exception value="org.mule.module.apikit.exception.BadRequestException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property" />
+            <set-payload value="{ &quot;message&quot;: &quot;Bad request&quot; }" doc:name="Set Payload" />
+        </apikit:mapping>
+    </apikit:mapping-exception-strategy>
+</mule>
